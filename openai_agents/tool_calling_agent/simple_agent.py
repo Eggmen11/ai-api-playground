@@ -149,7 +149,7 @@ class Agent:
 
 
     def convo(self, stream=False):
-        print("Welcome to Agent Convog (to exit type 'exit')")
+        print("Welcome to Agent Convo (to exit type 'exit')")
         while True:
             user_msg = input(">")
             if user_msg == "exit":

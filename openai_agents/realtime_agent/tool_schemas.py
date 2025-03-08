@@ -67,5 +67,3 @@ test_dict = {
         }
       }
 }
-
-print(list(test_dict.values()))

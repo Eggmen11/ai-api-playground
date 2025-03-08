@@ -25,7 +25,6 @@ headers = [
     "OpenAI-Beta: realtime=v1"
 ]
 
-
 class RT_Agent:
     def __init__(self, sys_msg, tools, verbose=False, modalities=["text", "audio"]):
         self.sys_msg = sys_msg
@@ -35,8 +34,8 @@ class RT_Agent:
         self.p = pyaudio.PyAudio()
         self.audio_stream_output = None
         self.audio_stream_input = None
-        self.done_event = threading.Event()  # Event to signal threads to stop
-
+        self.done_event = threading.Event()
+        self.input_mode = None  # Initialize for convo mode
         if tools:
             self.tool_schemas = [rt_tool_schemas_dict[tool_name] for tool_name in tools]
         self.mode = None
@@ -47,7 +46,6 @@ class RT_Agent:
         Helper function to send a user message (conversation.item.create)
         and then request an AI response (response.create).
         """
-        # Send user message
         message = {
             "type": "conversation.item.create",
             "item": {
@@ -57,8 +55,6 @@ class RT_Agent:
             },
         }
         ws.send(json.dumps(message))
-
-        # Request AI response
         response_request = {
             "type": "response.create",
             "response": {"modalities": ["audio", "text"]},
@@ -87,34 +83,24 @@ class RT_Agent:
         Handles incoming WebSocket messages.
         """
         data = json.loads(msg)
-
-        # Handle audio streaming
         if "audio" in self.output_modals and data.get("type") == "response.audio.delta":
             audio_b64 = data.get("delta")
             if audio_b64:
                 audio_data = base64.b64decode(audio_b64)
                 if self.audio_stream_output:
                     self.audio_stream_output.write(audio_data)
-
-        # Handle text streaming
         if "text" in self.output_modals and data.get("type") == "response.audio_transcript.delta":
             print(data["delta"], end="", flush=True)
-
-        # Handle completion
         if data.get("type") == "response.done":
             print("\n--- End of response ---\n")
-
             if data["response"]["output"][0].get("type") == "function_call":
                 res_output = data["response"]["output"][0]
                 call_id = res_output["call_id"]
                 tool_name = res_output["name"]
                 parsed_args = json.loads(res_output["arguments"])
-                
                 print(f"Calling {tool_name} with arguments {parsed_args}")
                 output = self.call_tool(tool_name, parsed_args)
                 print(f"Output: {output}")
-
-                # 1) Send conversation item with function_call_output
                 tool_response = {
                     "type": "conversation.item.create",
                     "item": {
@@ -124,15 +110,10 @@ class RT_Agent:
                     }
                 }
                 ws.send(json.dumps(tool_response))
-
-                # 2) Ask the model to generate a final response that uses the function output
                 ws.send(json.dumps({
                     "type": "response.create",
-                    "response": {
-                        "modalities": ["audio", "text"]
-                    }
+                    "response": {"modalities": ["audio", "text"]}
                 }))
-
             if self.mode == "invoke":
                 ws.close()
                 self.done_event.set()
@@ -142,37 +123,34 @@ class RT_Agent:
         Handles WebSocket connection opening.
         """
         print("WebSocket connected. Session started.")
-
-        # Initialize playback and microphone streams
-        self.audio_stream_output = self.p.open(
-            format=pyaudio.paInt16, channels=1, rate=24000, output=True
-        )
-        self.audio_stream_input = self.p.open(
-            format=pyaudio.paInt16, channels=1, rate=24000, input=True, frames_per_buffer=1024
-        )
-
+        # Open output stream if audio output is enabled
+        if "audio" in self.output_modals:
+            self.audio_stream_output = self.p.open(
+                format=pyaudio.paInt16, channels=1, rate=24000, output=True
+            )
+        # Open input stream only for convo mode with audio input
+        if self.mode == "convo" and self.input_mode == "audio":
+            self.audio_stream_input = self.p.open(
+                format=pyaudio.paInt16, channels=1, rate=24000, input=True, frames_per_buffer=1024
+            )
         # Send session setup
         session_update = {"type": "session.update", "session": {"modalities": self.output_modals}}
         if self.tools:
             session_update["session"]["tools"] = self.tool_schemas
             session_update["session"]["tool_choice"] = "auto"
-        print(session_update)
         ws.send(json.dumps(session_update))
-
-        # Start audio streaming in convo mode
-        if self.mode == "convo":
+        # Handle mode-specific actions
+        if self.mode == "convo" and self.input_mode == "audio":
             threading.Thread(target=self.stream_microphone_audio, args=(ws,), daemon=True).start()
+        elif self.mode == "invoke":
+            self.send_message(ws, self.invoke_message)
 
     def _on_close(self, ws, close_status_code, close_msg):
         """
         Handles WebSocket connection closure.
         """
         print(f"WebSocket closed: {close_status_code} {close_msg}")
-
-        # Signal threads to stop
         self.done_event.set()
-
-        # Close audio streams
         if self.audio_stream_input:
             self.audio_stream_input.stop_stream()
             self.audio_stream_input.close()
@@ -195,7 +173,6 @@ class RT_Agent:
         self.mode = "invoke"
         self.invoke_message = user_msg
         self.done_event.clear()
-
         ws = websocket.WebSocketApp(
             url,
             header=headers,
@@ -206,13 +183,13 @@ class RT_Agent:
         )
         ws.run_forever()
 
-    def convo(self):
+    def convo(self, input_mode="text"):
         """
-        Start a conversation with the agent.
+        Start a conversation with the agent, allowing text or audio input based on input_mode.
         """
         self.mode = "convo"
+        self.input_mode = input_mode
         self.done_event.clear()
-
         ws = websocket.WebSocketApp(
             url,
             header=headers,
@@ -221,7 +198,6 @@ class RT_Agent:
             on_close=self._on_close,
             on_error=self._on_error,
         )
-
         def input_loop():
             while not self.done_event.is_set():
                 user_input = input("You: ")
@@ -231,8 +207,8 @@ class RT_Agent:
                     break
                 if user_input.strip():
                     self.send_message(ws, user_input)
-
-        threading.Thread(target=input_loop, daemon=True).start()
+        if self.input_mode == "text":
+            threading.Thread(target=input_loop, daemon=True).start()
         ws.run_forever()
 
     def call_tool(self, name, args):
@@ -242,13 +218,19 @@ class RT_Agent:
 # Example usage
 if __name__ == "__main__":
     agent = RT_Agent(sys_msg="", tools=list(tool_map.keys()))
-    print("Choose mode: \n1. Invoke (Single message)\n2. Convo (Interactive conversation)")
+    print("Choose mode:")
+    print("1. Invoke (Single message)")
+    print("2. Convo (Interactive conversation)")
     mode = input("Enter 1 or 2: ")
-
     if mode == "1":
         user_message = input("Enter your message: ")
         agent.invoke(user_message)
     elif mode == "2":
-        agent.convo()
+        print("Choose input mode:")
+        print("1. Text")
+        print("2. Audio")
+        choice = input("Enter 1 or 2: ")
+        input_mode = "text" if choice == "1" else "audio"
+        agent.convo(input_mode=input_mode)
     else:
         print("Invalid choice. Exiting.")

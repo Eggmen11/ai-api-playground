@@ -8,8 +8,6 @@ from common.tools import tool_map
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
-
-
 # Define the model to use
 MODEL_NAME = "gpt-4o-mini"
 
@@ -41,7 +39,6 @@ def simple_agent_example():
     print("\n💬 Example 4: Interactive Chat Mode (Type 'exit' to quit)")
     agent.convo(stream=True)
 
-
 def realtime_agent_example():
     """Example usage of the Realtime Agent."""
     print("\n🔹 Running Realtime Agent Example...\n")
@@ -52,15 +49,25 @@ def realtime_agent_example():
     
     agent = RT_Agent(sys_msg=sys_msg, tools=tools, verbose=True)
 
-    # Example 1: Invoke a real-time response
+    # Example 1: Invoke a real-time response (text input only)
     print("\n🗣 Example 1: Realtime AI Response")
     user_message = "Tell me a fun fact about technology."
     agent.invoke(user_message)
 
-    # Example 2: Start real-time conversation
+    # Example 2: Start real-time conversation with input mode selection
     print("\n🎙 Example 2: Realtime Interactive Mode (Type 'exit' to quit)")
-    agent.convo()
-
+    print("Choose input mode:")
+    print("1. Text")
+    print("2. Audio")
+    choice = input("Enter 1 or 2: ")
+    if choice == "1":
+        input_mode = "text"
+    elif choice == "2":
+        input_mode = "audio"
+    else:
+        print("Invalid choice. Defaulting to text.")
+        input_mode = "text"
+    agent.convo(input_mode=input_mode)
 
 if __name__ == "__main__":
     print("Choose an agent to test:")
