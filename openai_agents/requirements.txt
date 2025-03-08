@@ -1,0 +1,16 @@
+# Core AI & API dependencies
+openai
+requests
+websocket-client
+
+# Environment variable management
+python-dotenv
+
+# Audio processing (for realtime_agent)
+pyaudio
+
+# General utilities
+jsonschema  # If you validate tool schemas (optional)
+
+# Async/Websocket handling (used in real-time agent)
+websockets
