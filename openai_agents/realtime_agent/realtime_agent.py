@@ -12,10 +12,10 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 sys.path.append(PROJECT_ROOT)
 
 from common.tools import tool_map
-from tool_schemas import rt_tool_schemas_dict, test_dict
+from openai_agents.realtime_agent.tool_schemas import rt_tool_schemas_dict 
 
 # Load environment variables
-load_dotenv()
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # WebSocket URL and headers

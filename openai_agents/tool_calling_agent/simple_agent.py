@@ -8,12 +8,11 @@ from openai import OpenAI
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
 
-from common.tools import tool_map
-from tool_schemas import tool_schemas_dict
+from openai_agents.common.tools import tool_map
+from openai_agents.tool_calling_agent.tool_schemas import tool_schemas_dict
 
-
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 client = OpenAI()
-load_dotenv()
 
 default_sys_msg = "You are a helful agent possibly equiped with some useful tools"
 
@@ -174,4 +173,3 @@ if __name__ == '__main__':
 
     print(a1.invoke("Hello"))
 
-# Streamning Agent
